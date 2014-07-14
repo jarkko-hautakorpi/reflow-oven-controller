@@ -10,11 +10,15 @@ TEMPLATE = app
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    settingsdialog.cpp
+    settingsdialog.cpp \
+    hdlc.cpp \
+    crc16_ccitt.c
 
 HEADERS += \
     mainwindow.h \
-    settingsdialog.h
+    settingsdialog.h \
+    hdlc.h \
+    crc16_ccitt.h
 
 FORMS += \
     mainwindow.ui \

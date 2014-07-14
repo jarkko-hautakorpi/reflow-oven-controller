@@ -23,6 +23,8 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(QWidget *parent = 0);
+    void writeByte(quint8 &data);
+    void hdlc_on_rx_frame();
     ~MainWindow();
 
 private slots:

@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "settingsdialog.h"
+#include "hdlc.h"
 
 #include <QMessageBox>
 #include <QtSerialPort/QSerialPort>
@@ -13,7 +14,9 @@ MainWindow::MainWindow(QWidget *parent) :
 
     //setCentralWidget(console);
     serial = new QSerialPort(this);
+    hdlc_init(&MainWindow::writeByte, &MainWindow::hdlc_on_rx_frame);
     settings = new SettingsDialog;
+
 
     ui->actionConnect->setEnabled(true);
     ui->actionDisconnect->setEnabled(false);
@@ -81,6 +84,12 @@ void MainWindow::writeData(const QByteArray &data)
 {
     serial->write(data);
 }
+// Serial port send byte (for hdlc)
+void MainWindow::writeByte(quint8 &data)
+{
+    const QByteArray array_data = data;
+    this->writeData(array_data);
+}
 
 void MainWindow::readData()
 {
@@ -111,4 +120,9 @@ void MainWindow::initActionsConnections()
     connect(ui->actionClear, SIGNAL(triggered()), this, SLOT(clearLog()));
     connect(ui->actionAbout, SIGNAL(triggered()), this, SLOT(about()));
     connect(ui->actionAboutQt, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
+}
+
+void MainWindow::hdlc_on_rx_frame()
+{
+    ;
 }
