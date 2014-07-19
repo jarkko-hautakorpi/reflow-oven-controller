@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Simple Terminal</string>
+   <string>Reflow Terminal</string>
   </property>
   <widget class="QWidget" name="centralWidget">
    <layout class="QVBoxLayout" name="verticalLayout_12">
@@ -747,38 +747,6 @@
     <hint type="destinationlabel">
      <x>220</x>
      <y>315</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>pushButton_manualSet</sender>
-   <signal>clicked()</signal>
-   <receiver>pushButton</receiver>
-   <slot>toggle()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>248</x>
-     <y>248</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>333</x>
-     <y>231</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>pushButton_manualReset</sender>
-   <signal>clicked()</signal>
-   <receiver>pushButton</receiver>
-   <slot>toggle()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>248</x>
-     <y>281</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>338</x>
-     <y>249</y>
     </hint>
    </hints>
   </connection>

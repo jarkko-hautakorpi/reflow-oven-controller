@@ -5,6 +5,11 @@
 #include <QMessageBox>
 #include <QtSerialPort/QSerialPort>
 
+quint8 MainWindow::hdlc_rx_frame[HDLC_MRU] = {0};
+int MainWindow::hdlc_rx_frame_index = 0;
+int MainWindow::hdlc_rx_frame_fcs   = HDLC_INITFCS;
+bool MainWindow::hdlc_rx_char_esc    = false;
+
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -14,9 +19,7 @@ MainWindow::MainWindow(QWidget *parent) :
     //setCentralWidget(console);
     serial = new QSerialPort(this);
     // HDLC settings
-    int hdlc_rx_frame_index = 0;
-    int hdlc_rx_frame_fcs   = HDLC_INITFCS;
-    bool hdlc_rx_char_esc    = false;
+
     // Serial port settings dialog
     settings = new SettingsDialog;
 
@@ -33,6 +36,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     connect(serial, SIGNAL(readyRead()), this, SLOT(readData()));
     //connect(console, SIGNAL(getData(QByteArray)), this, SLOT(writeData(QByteArray)));
+    connect(ui->pushButton_manualSet, SIGNAL(clicked()), this, SLOT(set_manual_mode()));
+    connect(ui->pushButton_manualReset, SIGNAL(clicked()), this, SLOT(reset_manual_mode()));
 }
 
 MainWindow::~MainWindow()
@@ -97,7 +102,7 @@ void MainWindow::writeByte(const quint8 data)
 void MainWindow::readData()
 {
     QByteArray data = serial->readAll();
-    //console->putData(data);
+    MainWindow::hdlc_on_rx_byte(data);
 }
 
 void MainWindow::clearLog()
@@ -114,6 +119,21 @@ void MainWindow::handleError(QSerialPort::SerialPortError error)
     }
 }
 
+void MainWindow::set_manual_mode()
+{
+    const QString test_data = "A";
+    ui->statusBar->showMessage(tr("Manual start"));
+    ui->plainTextSerialLog->appendPlainText(test_data);
+    QByteArray character = test_data.toLocal8Bit();
+    const char *c_str2 = character.data();
+    MainWindow::hdlc_tx_frame(c_str2,1);
+}
+
+void MainWindow::reset_manual_mode()
+{
+    ui->statusBar->showMessage(tr("Manual reset"));
+}
+
 void MainWindow::initActionsConnections()
 {
     connect(ui->actionConnect, SIGNAL(triggered()), this, SLOT(openSerialPort()));
@@ -125,84 +145,98 @@ void MainWindow::initActionsConnections()
     connect(ui->actionAboutQt, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
 }
 
-void MainWindow::hdlc_on_rx_byte(quint8 data)
+void MainWindow::hdlc_on_rx_byte(QByteArray q_data)
 {
-    // Start/End sequence
-    if(data == HDLC_FLAG_SEQUENCE)
+    quint8 data = 0;
+    for(int i=0;i<q_data.size();i++)
     {
-        // If Escape sequence + End sequence is received then this packet must be silently discarded
-        if(hdlc_rx_char_esc == true)
+        data = static_cast<quint8>(q_data[i]);
+        // Start/End sequence
+        if(data == HDLC_FLAG_SEQUENCE)
         {
-            MainWindow::hdlc_rx_char_esc = false;
+            // If Escape sequence + End sequence is received then this packet must be silently discarded
+            if(hdlc_rx_char_esc == true)
+            {
+                MainWindow::hdlc_rx_char_esc = false;
+            }
+            //  Minimum requirement for a valid frame is reception of good FCS
+            else if(  (MainWindow::hdlc_rx_frame_index >= sizeof(hdlc_rx_frame_fcs))
+                      &&(hdlc_rx_frame_fcs   == CRC16_CCITT_MAGIC_VAL    )  )
+            {
+                // Pass on frame with FCS field removed
+                quint16 frm_index = (quint16)MainWindow::hdlc_rx_frame_index-2;
+                MainWindow::hdlc_on_rx_frame((const quint8*)(MainWindow::hdlc_rx_frame), frm_index);
+            }
+            // Reset for next packet
+            MainWindow::hdlc_rx_frame_index = 0;
+            hdlc_rx_frame_fcs   = CRC16_CCITT_INIT_VAL;
+            return;
         }
-        //  Minimum requirement for a valid frame is reception of good FCS
-        else if(  (MainWindow::hdlc_rx_frame_index >= sizeof(hdlc_rx_frame_fcs))
-                  &&(hdlc_rx_frame_fcs   == CRC16_CCITT_MAGIC_VAL    )  )
+
+        // Escape sequence processing
+        if(MainWindow::hdlc_rx_char_esc)
         {
-            // Pass on frame with FCS field removed
-            quint16 frm_index = (quint16)MainWindow::hdlc_rx_frame_index-2;
-            MainWindow::hdlc_on_rx_frame((const quint8*)hdlc_rx_frame, frm_index);
+            MainWindow::hdlc_rx_char_esc  = false;
+            data             ^= HDLC_ESCAPE_BIT;
         }
-        // Reset for next packet
-        MainWindow::hdlc_rx_frame_index = 0;
-        hdlc_rx_frame_fcs   = CRC16_CCITT_INIT_VAL;
-        return;
-    }
+        else if(data == HDLC_CONTROL_ESCAPE)
+        {
+            MainWindow::hdlc_rx_char_esc = true;
+            return;
+        }
 
-    // Escape sequence processing
-    if(MainWindow::hdlc_rx_char_esc)
-    {
-        MainWindow::hdlc_rx_char_esc  = false;
-        data             ^= HDLC_ESCAPE_BIT;
-    }
-    else if(data == HDLC_CONTROL_ESCAPE)
-    {
-        MainWindow::hdlc_rx_char_esc = true;
-        return;
-    }
+        // Store received data
+        MainWindow::hdlc_rx_frame[MainWindow::hdlc_rx_frame_index] = data;
 
-    // Store received data
-    hdlc_rx_frame[MainWindow::hdlc_rx_frame_index] = data;
+        // Calculate checksum
+        hdlc_rx_frame_fcs = qChecksum((const char *) data, q_data.size());
+        //crc16_ccitt_calc_byte((quint16)hdlc_rx_frame_fcs, (quint8)data);
 
-    // Calculate checksum
-    qChecksum((const char *) data, hdlc_rx_frame_fcs);
-    //crc16_ccitt_calc_byte((quint16)hdlc_rx_frame_fcs, (quint8)data);
+        // Go to next position in buffer
+        MainWindow::hdlc_rx_frame_index++;
 
-    // Go to next position in buffer
-    MainWindow::hdlc_rx_frame_index++;
+        // Check for buffer overflow
+        if(MainWindow::hdlc_rx_frame_index == HDLC_MRU)
+        {
+            // Wrap index
+            MainWindow::hdlc_rx_frame_index  = 0;
 
-    // Check for buffer overflow
-    if(MainWindow::hdlc_rx_frame_index == HDLC_MRU)
-    {
-        // Wrap index
-        MainWindow::hdlc_rx_frame_index  = 0;
-
-        // Invalidate FCS so that packet will be rejected
-        hdlc_rx_frame_fcs  ^= 0xFFFF;
+            // Invalidate FCS so that packet will be rejected
+            hdlc_rx_frame_fcs  ^= 0xFFFF;
+        }
     }
 }
 
 void MainWindow::hdlc_on_rx_frame(const quint8 *buffer, quint16 bytes_received)
 {
-
+    if(bytes_received)
+    {
+        ui->plainTextSerialLog->appendPlainText((const QString)buffer[0]);
+    } else {
+        for(int i=0;i<bytes_received;i++)
+        {
+            ui->plainTextSerialLog->appendPlainText((const QString)buffer[i]);
+        }
+    }
 }
 
-void MainWindow::hdlc_tx_frame(const quint8 *buffer, quint8 bytes_to_send)
+void MainWindow::hdlc_tx_frame(const char *buffer, quint8 bytes_to_send)
 {
-    quint8  data;
+    quint8 data;
     quint16 fcs = CRC16_CCITT_INIT_VAL;
+    int arrsize = SIZEOF_ARRAY(buffer);
 
     // Start marker
-    MainWindow::hdlc_tx_byte(HDLC_FLAG_SEQUENCE);
+    MainWindow::hdlc_tx_byte((quint8)HDLC_FLAG_SEQUENCE);
+
+    // Update checksum
+    fcs = qChecksum(buffer,SIZEOF_ARRAY(buffer));
 
     // Send escaped data
     while(bytes_to_send)
     {
         // Get next data
-        data = *buffer++;
-
-        // Update checksum
-        qChecksum((const char *) data,fcs);
+        data = *(buffer++);
 
         // See if data should be escaped
         if((data == HDLC_CONTROL_ESCAPE) || (data == HDLC_FLAG_SEQUENCE))
@@ -243,8 +277,18 @@ void MainWindow::hdlc_tx_frame(const quint8 *buffer, quint8 bytes_to_send)
     MainWindow::hdlc_tx_byte(HDLC_FLAG_SEQUENCE);
 }
 
-void MainWindow::hdlc_tx_byte(quint8 byte)
+void MainWindow::hdlc_tx_byte(const char *byte)
 {
-    serial->write((const char*)byte);
+    serial->write(static_cast<QByteArray>(byte));
+}
+void MainWindow::hdlc_tx_byte(int byte)
+{
+    char tchar = (char)byte;
+    const char *cbyte = &tchar;
+    serial->write(cbyte);
+}
+void MainWindow::hdlc_tx_byte(QByteArray *byte)
+{
+    serial->write(*byte);
 }
 
