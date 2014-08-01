@@ -8,12 +8,17 @@
 
 // HDLC settings
 #define HDLC_MRU    64
-#define HDLC_FLAG_SEQUENCE  0x7e   // Flag Sequence
-#define HDLC_CONTROL_ESCAPE 0x7d   // Asynchronous Control Escape
-#define HDLC_ESCAPE_BIT     0x20   // Asynchronous transparency modifier
+#define HDLC_FLAG_SEQUENCE  0x7e   // Flag Sequence d126, 7E, "~"
+#define HDLC_CONTROL_ESCAPE 0x7d   // Asynchronous Control Escape d125, 7D, "}"
+#define HDLC_ESCAPE_BIT     0x20   // Asynchronous transparency modifier d32, 20, " "
 #define HDLC_INITFCS        0xffff
 #define HDLC_GOODFCS        0xf0b8
 #define HDLC_FCS_POLYNOMIAL 0x8408
+#define CRC16_CCITT_POLYNOMIAL  0x8408
+/// Initial CRC value
+#define CRC16_CCITT_INIT_VAL    0xffff
+/// Magic CRC value
+#define CRC16_CCITT_MAGIC_VAL   0xf0b8
 #define U16_HI8(data) ((quint8)(((data)>>8)&0xff))
 #define U16_LO8(data) ((quint8)((data)&0xff))
 #define U32_HI8(data) ((quint8)(((data)>>24)&0xff))
@@ -39,6 +44,7 @@ public:
     static int hdlc_rx_frame_index;
     static int hdlc_rx_frame_fcs;
     static bool hdlc_rx_char_esc;
+    static QString testbuffer;
     explicit MainWindow(QWidget *parent = 0);
     void writeByte(const quint8 data);
     void hdlc_on_rx_frame(const quint8 *buffer, quint16 bytes_received);
@@ -55,8 +61,10 @@ private slots:
     // GUI button actions
     void set_manual_mode();
     void reset_manual_mode();
+    void updateTemperatureReading();
 
 private:
+    QTimer *timer;
     void initActionsConnections();
     void hdlc_on_rx_byte(QByteArray q_data);
     void hdlc_on_rx_frame(const quint8 *buffer, qint16 bytes_received);
@@ -64,6 +72,8 @@ private:
     void hdlc_tx_byte(const char *byte);
     void hdlc_tx_byte(int byte);
     void hdlc_tx_byte(QByteArray *byte);
+    void local_echo(char character);
+    void sendCommand(int command);
 
 private:
     Ui::MainWindow *ui;

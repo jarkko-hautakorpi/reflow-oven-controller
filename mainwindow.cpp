@@ -1,22 +1,23 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "settingsdialog.h"
-#include "crc16_ccitt.h"
+#include "reflow_commands.h"
 #include <QMessageBox>
 #include <QtSerialPort/QSerialPort>
+#include <QTimer>
 
 quint8 MainWindow::hdlc_rx_frame[HDLC_MRU] = {0};
 int MainWindow::hdlc_rx_frame_index = 0;
 int MainWindow::hdlc_rx_frame_fcs   = HDLC_INITFCS;
 bool MainWindow::hdlc_rx_char_esc    = false;
-
+QString MainWindow::testbuffer = "";
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    //setCentralWidget(console);
+    timer = new QTimer(this);
     serial = new QSerialPort(this);
     // HDLC settings
 
@@ -38,6 +39,10 @@ MainWindow::MainWindow(QWidget *parent) :
     //connect(console, SIGNAL(getData(QByteArray)), this, SLOT(writeData(QByteArray)));
     connect(ui->pushButton_manualSet, SIGNAL(clicked()), this, SLOT(set_manual_mode()));
     connect(ui->pushButton_manualReset, SIGNAL(clicked()), this, SLOT(reset_manual_mode()));
+    // Update/get temperature every 1 second using QTimer
+
+    //connect(timer, SIGNAL(timeout()), this, SLOT(updateTemperatureReading()));
+    //timer->start(1000);
 }
 
 MainWindow::~MainWindow()
@@ -62,6 +67,8 @@ void MainWindow::openSerialPort()
             ui->statusBar->showMessage(tr("Connected to %1 : %2, %3, %4, %5, %6")
                                        .arg(p.name).arg(p.stringBaudRate).arg(p.stringDataBits)
                                        .arg(p.stringParity).arg(p.stringStopBits).arg(p.stringFlowControl));
+            connect(MainWindow::timer, SIGNAL(timeout()), this, SLOT(MainWindow::updateTemperatureReading()));
+            MainWindow::timer->start(1000);
     } else {
         QMessageBox::critical(this, tr("Error"), serial->errorString());
 
@@ -71,6 +78,8 @@ void MainWindow::openSerialPort()
 
 void MainWindow::closeSerialPort()
 {
+    disconnect(timer, SIGNAL(timeout()), this, SLOT(updateTemperatureReading()));
+    sendCommand(COMMAND_STOP_ALL);
     serial->close();
     //console->setEnabled(false);
     ui->actionConnect->setEnabled(true);
@@ -121,17 +130,22 @@ void MainWindow::handleError(QSerialPort::SerialPortError error)
 
 void MainWindow::set_manual_mode()
 {
-    const QString test_data = "A";
+    const QString test_data = "ABC";
     ui->statusBar->showMessage(tr("Manual start"));
     ui->plainTextSerialLog->appendPlainText(test_data);
     QByteArray character = test_data.toLocal8Bit();
     const char *c_str2 = character.data();
-    MainWindow::hdlc_tx_frame(c_str2,1);
+    MainWindow::hdlc_tx_frame(c_str2,character.size());
 }
 
 void MainWindow::reset_manual_mode()
 {
     ui->statusBar->showMessage(tr("Manual reset"));
+}
+
+void MainWindow::updateTemperatureReading()
+{
+    sendCommand(COMMAND_GET_TEMPERATURE);
 }
 
 void MainWindow::initActionsConnections()
@@ -148,6 +162,7 @@ void MainWindow::initActionsConnections()
 void MainWindow::hdlc_on_rx_byte(QByteArray q_data)
 {
     quint8 data = 0;
+    int qsize = q_data.size();
     for(int i=0;i<q_data.size();i++)
     {
         data = static_cast<quint8>(q_data[i]);
@@ -188,8 +203,8 @@ void MainWindow::hdlc_on_rx_byte(QByteArray q_data)
         // Store received data
         MainWindow::hdlc_rx_frame[MainWindow::hdlc_rx_frame_index] = data;
 
-        // Calculate checksum
-        hdlc_rx_frame_fcs = qChecksum((const char *) data, q_data.size());
+        // Calculate checksum EI TOIMI EI TÄHÄN!
+        hdlc_rx_frame_fcs = qChecksum((const char *) data, 1);
         //crc16_ccitt_calc_byte((quint16)hdlc_rx_frame_fcs, (quint8)data);
 
         // Go to next position in buffer
@@ -224,7 +239,7 @@ void MainWindow::hdlc_tx_frame(const char *buffer, quint8 bytes_to_send)
 {
     quint8 data;
     quint16 fcs = CRC16_CCITT_INIT_VAL;
-    int arrsize = SIZEOF_ARRAY(buffer);
+    int buffsize = SIZEOF_ARRAY(buffer);
 
     // Start marker
     MainWindow::hdlc_tx_byte((quint8)HDLC_FLAG_SEQUENCE);
@@ -281,14 +296,30 @@ void MainWindow::hdlc_tx_byte(const char *byte)
 {
     serial->write(static_cast<QByteArray>(byte));
 }
+
 void MainWindow::hdlc_tx_byte(int byte)
 {
-    char tchar = (char)byte;
-    const char *cbyte = &tchar;
-    serial->write(cbyte);
+    MainWindow::testbuffer.append((char)byte);
+    serial->write(QByteArray(1, (char)byte));
 }
+
 void MainWindow::hdlc_tx_byte(QByteArray *byte)
 {
     serial->write(*byte);
 }
 
+void MainWindow::local_echo(char character)
+{
+    SettingsDialog::Settings p = settings->settings();
+    if(p.localEchoEnabled)
+    {
+        ui->plainTextSerialLog->appendPlainText(QString::number(character));
+    }
+}
+
+void MainWindow::sendCommand(int command) {
+    QByteArray character;
+    character.append((char)command);
+    const char *c_str2 = character.data();
+    MainWindow::hdlc_tx_frame(c_str2,1);
+}

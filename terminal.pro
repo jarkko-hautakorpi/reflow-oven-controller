@@ -16,7 +16,8 @@ SOURCES += \
 HEADERS += \
     mainwindow.h \
     settingsdialog.h \
-    crc16_ccitt.h
+    crc16_ccitt.h \
+    reflow_commands.h
 
 FORMS += \
     mainwindow.ui \
