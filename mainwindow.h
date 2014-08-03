@@ -62,16 +62,17 @@ private slots:
     void set_manual_mode();
     void reset_manual_mode();
     void updateTemperatureReading();
+    void receivedTemperatureReading(const quint8 *buffer, quint16 bytes_received);
 
 private:
     QTimer *timer;
     void initActionsConnections();
     void hdlc_on_rx_byte(QByteArray q_data);
-    void hdlc_on_rx_frame(const quint8 *buffer, qint16 bytes_received);
     void hdlc_tx_frame(const char *buffer, quint8 bytes_to_send);
     void hdlc_tx_byte(const char *byte);
     void hdlc_tx_byte(int byte);
     void hdlc_tx_byte(QByteArray *byte);
+    bool hdlc_rx_frame_crc_check(int frame_index);
     void local_echo(char character);
     void sendCommand(int command);
 

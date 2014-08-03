@@ -23,8 +23,6 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // Serial port settings dialog
     settings = new SettingsDialog;
-
-
     ui->actionConnect->setEnabled(true);
     ui->actionDisconnect->setEnabled(false);
     ui->actionQuit->setEnabled(true);
@@ -148,6 +146,17 @@ void MainWindow::updateTemperatureReading()
     sendCommand(COMMAND_GET_TEMPERATURE);
 }
 
+void MainWindow::receivedTemperatureReading(const quint8 *buffer, quint16 bytes_received)
+{
+    quint16 temperature = 0;
+    temperature |= buffer[1]; // msb
+    temperature << 8;
+    temperature |= buffer[2]; // lsb
+    QString temp;
+    temp.setNum(temperature);
+    ui->lcdNumber->display(temp);
+}
+
 void MainWindow::initActionsConnections()
 {
     connect(ui->actionConnect, SIGNAL(triggered()), this, SLOT(openSerialPort()));
@@ -162,7 +171,6 @@ void MainWindow::initActionsConnections()
 void MainWindow::hdlc_on_rx_byte(QByteArray q_data)
 {
     quint8 data = 0;
-    int qsize = q_data.size();
     for(int i=0;i<q_data.size();i++)
     {
         data = static_cast<quint8>(q_data[i]);
@@ -174,9 +182,9 @@ void MainWindow::hdlc_on_rx_byte(QByteArray q_data)
             {
                 MainWindow::hdlc_rx_char_esc = false;
             }
-            //  Minimum requirement for a valid frame is reception of good FCS
-            else if(  (MainWindow::hdlc_rx_frame_index >= sizeof(hdlc_rx_frame_fcs))
-                      &&(hdlc_rx_frame_fcs   == CRC16_CCITT_MAGIC_VAL    )  )
+            //  CRC validation
+            else if(  (MainWindow::hdlc_rx_frame_index >= 2) // one data byte + 2 CRC bytes
+                      &&(hdlc_rx_frame_crc_check(MainWindow::hdlc_rx_frame_index)) )
             {
                 // Pass on frame with FCS field removed
                 quint16 frm_index = (quint16)MainWindow::hdlc_rx_frame_index-2;
@@ -204,7 +212,7 @@ void MainWindow::hdlc_on_rx_byte(QByteArray q_data)
         MainWindow::hdlc_rx_frame[MainWindow::hdlc_rx_frame_index] = data;
 
         // Calculate checksum EI TOIMI EI TÄHÄN!
-        hdlc_rx_frame_fcs = qChecksum((const char *) data, 1);
+        //hdlc_rx_frame_fcs = qChecksum((const char *) data, 1);
         //crc16_ccitt_calc_byte((quint16)hdlc_rx_frame_fcs, (quint8)data);
 
         // Go to next position in buffer
@@ -227,25 +235,26 @@ void MainWindow::hdlc_on_rx_frame(const quint8 *buffer, quint16 bytes_received)
     if(bytes_received)
     {
         ui->plainTextSerialLog->appendPlainText((const QString)buffer[0]);
-    } else {
-        for(int i=0;i<bytes_received;i++)
-        {
-            ui->plainTextSerialLog->appendPlainText((const QString)buffer[i]);
-        }
     }
+    enum reflow_responsemessages response = (reflow_responsemessages) buffer[0];
+    switch (response) {
+    case RESPONSE_TEMPERATURE: MainWindow::receivedTemperatureReading(buffer, bytes_received); break;
+    default:
+        break;
+    }
+
 }
 
 void MainWindow::hdlc_tx_frame(const char *buffer, quint8 bytes_to_send)
 {
     quint8 data;
-    quint16 fcs = CRC16_CCITT_INIT_VAL;
-    int buffsize = SIZEOF_ARRAY(buffer);
+    quint16 crc = CRC16_CCITT_INIT_VAL;
 
     // Start marker
     MainWindow::hdlc_tx_byte((quint8)HDLC_FLAG_SEQUENCE);
 
     // Update checksum
-    fcs = qChecksum(buffer,SIZEOF_ARRAY(buffer));
+    crc = qChecksum(buffer,SIZEOF_ARRAY(buffer));
 
     // Send escaped data
     while(bytes_to_send)
@@ -268,10 +277,10 @@ void MainWindow::hdlc_tx_frame(const char *buffer, quint8 bytes_to_send)
     }
 
     // Invert checksum
-    fcs ^= 0xffff;
+    crc ^= 0xffff;
 
     // Low byte of inverted FCS
-    data = U16_LO8(fcs);
+    data = U16_LO8(crc);
     if((data == HDLC_CONTROL_ESCAPE) || (data == HDLC_FLAG_SEQUENCE))
     {
         MainWindow::hdlc_tx_byte(HDLC_CONTROL_ESCAPE);
@@ -280,7 +289,7 @@ void MainWindow::hdlc_tx_frame(const char *buffer, quint8 bytes_to_send)
     MainWindow::hdlc_tx_byte(data);
 
     // High byte of inverted FCS
-    data = U16_HI8(fcs);
+    data = U16_HI8(crc);
     if((data == HDLC_CONTROL_ESCAPE) || (data == HDLC_FLAG_SEQUENCE))
     {
         MainWindow::hdlc_tx_byte(HDLC_CONTROL_ESCAPE);
@@ -308,6 +317,21 @@ void MainWindow::hdlc_tx_byte(QByteArray *byte)
     serial->write(*byte);
 }
 
+bool MainWindow::hdlc_rx_frame_crc_check(int frame_index)
+{
+    // frame = ...[CRC-LO] [CRC-HI]
+    quint16 crcvalue = 0;
+    crcvalue |= MainWindow::hdlc_rx_frame[frame_index]; // msb
+    crcvalue << 8;
+    crcvalue |= MainWindow::hdlc_rx_frame[frame_index-1]; // lsb
+    crcvalue = crcvalue ^ 0xffff;
+    if(crcvalue == qChecksum((const char*) &MainWindow::hdlc_rx_frame, frame_index-2)) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 void MainWindow::local_echo(char character)
 {
     SettingsDialog::Settings p = settings->settings();
@@ -318,6 +342,9 @@ void MainWindow::local_echo(char character)
 }
 
 void MainWindow::sendCommand(int command) {
+    //hdlc_tx_frame(reinterpret_cast<const char *>(&command), sizeof command);
+    //Tai:
+    //hdlc_tx_frame( (const char*) &command , sizeof command);
     QByteArray character;
     character.append((char)command);
     const char *c_str2 = character.data();

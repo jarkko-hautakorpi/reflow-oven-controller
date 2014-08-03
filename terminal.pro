@@ -10,13 +10,11 @@ TEMPLATE = app
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    settingsdialog.cpp \
-    crc16_ccitt.c
+    settingsdialog.cpp
 
 HEADERS += \
     mainwindow.h \
     settingsdialog.h \
-    crc16_ccitt.h \
     reflow_commands.h
 
 FORMS += \
