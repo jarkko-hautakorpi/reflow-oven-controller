@@ -75,6 +75,7 @@ private:
     bool hdlc_rx_frame_crc_check(int frame_index);
     void local_echo(char character);
     void sendCommand(int command);
+    bool hdlc_crc_check(int frame_index);
 
 private:
     Ui::MainWindow *ui;

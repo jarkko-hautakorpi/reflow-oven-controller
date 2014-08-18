@@ -128,7 +128,9 @@ void MainWindow::handleError(QSerialPort::SerialPortError error)
 
 void MainWindow::set_manual_mode()
 {
-    const QString test_data = "ABC";
+    QString test_data;
+    test_data += (char)COMMAND_RELAY_ON;
+    test_data += (char) 0b00000001;
     ui->statusBar->showMessage(tr("Manual start"));
     ui->plainTextSerialLog->appendPlainText(test_data);
     QByteArray character = test_data.toLocal8Bit();
@@ -184,7 +186,7 @@ void MainWindow::hdlc_on_rx_byte(QByteArray q_data)
             }
             //  CRC validation
             else if(  (MainWindow::hdlc_rx_frame_index >= 2) // one data byte + 2 CRC bytes
-                      &&(hdlc_rx_frame_crc_check(MainWindow::hdlc_rx_frame_index)) )
+                      &&(MainWindow::hdlc_crc_check(MainWindow::hdlc_rx_frame_index)) )
             {
                 // Pass on frame with FCS field removed
                 quint16 frm_index = (quint16)MainWindow::hdlc_rx_frame_index-2;
@@ -210,6 +212,7 @@ void MainWindow::hdlc_on_rx_byte(QByteArray q_data)
 
         // Store received data
         MainWindow::hdlc_rx_frame[MainWindow::hdlc_rx_frame_index] = data;
+        MainWindow::local_echo(data);
 
         // Calculate checksum EI TOIMI EI TÄHÄN!
         //hdlc_rx_frame_fcs = qChecksum((const char *) data, 1);
@@ -254,7 +257,7 @@ void MainWindow::hdlc_tx_frame(const char *buffer, quint8 bytes_to_send)
     MainWindow::hdlc_tx_byte((quint8)HDLC_FLAG_SEQUENCE);
 
     // Update checksum
-    crc = qChecksum(buffer,SIZEOF_ARRAY(buffer));
+    crc = qChecksum(buffer,bytes_to_send);
 
     // Send escaped data
     while(bytes_to_send)
@@ -277,7 +280,7 @@ void MainWindow::hdlc_tx_frame(const char *buffer, quint8 bytes_to_send)
     }
 
     // Invert checksum
-    crc ^= 0xffff;
+    //crc ^= 0xffff;
 
     // Low byte of inverted FCS
     data = U16_LO8(crc);
@@ -317,21 +320,6 @@ void MainWindow::hdlc_tx_byte(QByteArray *byte)
     serial->write(*byte);
 }
 
-bool MainWindow::hdlc_rx_frame_crc_check(int frame_index)
-{
-    // frame = ...[CRC-LO] [CRC-HI]
-    quint16 crcvalue = 0;
-    crcvalue |= MainWindow::hdlc_rx_frame[frame_index]; // msb
-    crcvalue << 8;
-    crcvalue |= MainWindow::hdlc_rx_frame[frame_index-1]; // lsb
-    crcvalue = crcvalue ^ 0xffff;
-    if(crcvalue == qChecksum((const char*) &MainWindow::hdlc_rx_frame, frame_index-2)) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
 void MainWindow::local_echo(char character)
 {
     SettingsDialog::Settings p = settings->settings();
@@ -349,4 +337,17 @@ void MainWindow::sendCommand(int command) {
     character.append((char)command);
     const char *c_str2 = character.data();
     MainWindow::hdlc_tx_frame(c_str2,1);
+}
+
+bool MainWindow::hdlc_crc_check(int frame_index) {
+    quint16 crc_received = 0;
+    crc_received = MainWindow::hdlc_rx_frame[frame_index-1];
+    crc_received = crc_received << 8;
+    crc_received |= MainWindow::hdlc_rx_frame[frame_index-2];
+    quint16 qtcrc = qChecksum( (const char *)MainWindow::hdlc_rx_frame, (frame_index-2));
+    if( crc_received == qtcrc) {
+        return true;
+    } else {
+        return false;
+    }
 }
