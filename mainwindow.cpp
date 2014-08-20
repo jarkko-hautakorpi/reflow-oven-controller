@@ -5,6 +5,7 @@
 #include <QMessageBox>
 #include <QtSerialPort/QSerialPort>
 #include <QTimer>
+#include <QTime>
 
 quint8 MainWindow::hdlc_rx_frame[HDLC_MRU] = {0};
 int MainWindow::hdlc_rx_frame_index = 0;
@@ -17,6 +18,8 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    ui->groupBox_Auto->setDisabled(true);
+    ui->groupBox_manual->setDisabled(true);
     timer = new QTimer(this);
     serial = new QSerialPort(this);
     // HDLC settings
@@ -32,11 +35,12 @@ MainWindow::MainWindow(QWidget *parent) :
 
     connect(serial, SIGNAL(error(QSerialPort::SerialPortError)), this,
             SLOT(handleError(QSerialPort::SerialPortError)));
-
+    // GUI Button signals to slots
     connect(serial, SIGNAL(readyRead()), this, SLOT(readData()));
-    //connect(console, SIGNAL(getData(QByteArray)), this, SLOT(writeData(QByteArray)));
     connect(ui->pushButton_manualSet, SIGNAL(clicked()), this, SLOT(set_manual_mode()));
     connect(ui->pushButton_manualReset, SIGNAL(clicked()), this, SLOT(reset_manual_mode()));
+    connect(ui->pushButton_StartReflow, SIGNAL(clicked()), this, SLOT(start_default_reflow()));
+    connect(ui->pushButton_StartReflow, SIGNAL(clicked()), this, SLOT(start_default_reflow()));
     // Update/get temperature every 1 second using QTimer
 
     //connect(timer, SIGNAL(timeout()), this, SLOT(updateTemperatureReading()));
@@ -58,6 +62,7 @@ void MainWindow::openSerialPort()
     serial->setParity(p.parity);
     serial->setStopBits(p.stopBits);
     serial->setFlowControl(p.flowControl);
+    //serial->setDataTerminalReady(false);
     if (serial->open(QIODevice::ReadWrite)) {
             ui->actionConnect->setEnabled(false);
             ui->actionDisconnect->setEnabled(true);
@@ -65,11 +70,14 @@ void MainWindow::openSerialPort()
             ui->statusBar->showMessage(tr("Connected to %1 : %2, %3, %4, %5, %6")
                                        .arg(p.name).arg(p.stringBaudRate).arg(p.stringDataBits)
                                        .arg(p.stringParity).arg(p.stringStopBits).arg(p.stringFlowControl));
-            connect(MainWindow::timer, SIGNAL(timeout()), this, SLOT(MainWindow::updateTemperatureReading()));
+            //connect(MainWindow::timer, SIGNAL(timeout()), this, SLOT(MainWindow::updateTemperatureReading()));
             MainWindow::timer->start(1000);
+            ui->groupBox_Auto->setDisabled(false);
+            ui->groupBox_manual->setDisabled(false);
+            serial->setDataTerminalReady(p.DTR_Signal);
+            serial->setRequestToSend(p.RTS_Signal);
     } else {
         QMessageBox::critical(this, tr("Error"), serial->errorString());
-
         ui->statusBar->showMessage(tr("Open error"));
     }
 }
@@ -152,7 +160,7 @@ void MainWindow::receivedTemperatureReading(const quint8 *buffer, quint16 bytes_
 {
     quint16 temperature = 0;
     temperature |= buffer[1]; // msb
-    temperature << 8;
+    temperature = temperature << 8;
     temperature |= buffer[2]; // lsb
     QString temp;
     temp.setNum(temperature);
@@ -233,15 +241,28 @@ void MainWindow::hdlc_on_rx_byte(QByteArray q_data)
     }
 }
 
+/**
+ * @brief Received command execution and handling
+ *
+ * @param buffer Received data
+ * @param bytes_received Number of received data bytes
+ */
 void MainWindow::hdlc_on_rx_frame(const quint8 *buffer, quint16 bytes_received)
 {
     if(bytes_received)
     {
         ui->plainTextSerialLog->appendPlainText((const QString)buffer[0]);
     }
-    enum reflow_responsemessages response = (reflow_responsemessages) buffer[0];
+    int response = (int) buffer[0];
     switch (response) {
-    case RESPONSE_TEMPERATURE: MainWindow::receivedTemperatureReading(buffer, bytes_received); break;
+    case COMMAND_GET_TEMPERATURE: MainWindow::receivedTemperatureReading(buffer, bytes_received);
+        break;
+    case COMMAND_RELAY_ON: MainWindow::showRelayState(buffer, bytes_received);
+        break;
+    case COMMAND_RELAY_OFF:  MainWindow::showRelayState(buffer, bytes_received);
+        break;
+    case COMMAND_STOP_ALL: MainWindow::stopAll();
+        break;
     default:
         break;
     }
@@ -349,5 +370,99 @@ bool MainWindow::hdlc_crc_check(int frame_index) {
         return true;
     } else {
         return false;
+    }
+}
+
+void MainWindow::start_default_reflow() {
+    // Change the GUI stuff
+    ui->progressBar->setMaximum(0);
+    ui->progressBar->setMinimum(0);
+    ui->progressBar->setValue(-1);
+    ui->groupBox_manual->setDisabled(true);
+
+    quint16 soak_temp=0, soak_time=0, reflow_temp=0, reflow_time=0;
+    QString data_frame;
+    QTime time = ui->timeEdit_soak->time();
+    // Soak
+    soak_time = (60 * time.minute()) + (time.second());
+    soak_temp = ui->lineEdit_soakTemp->text().toInt();
+    // Reflow
+    time = ui->timeEdit_reflow->time();
+    reflow_time = (60 * time.minute()) + (time.second());
+    reflow_temp = ui->lineEdit_reflowTemp->text().toInt();
+    // Frame structure = "command, soaktimeH, soaktimeL, soaktempH, soaktempL, reflowtimeH, reflowtimeL, reflowtempH, reflowtempL"
+    data_frame += (char)COMMAND_START_DEFAULT_REFLOW;
+    data_frame += (char) U16_HI8(soak_time);    data_frame += (char) U16_LO8(soak_time);
+    data_frame += (char) U16_HI8(soak_temp);    data_frame += (char) U16_LO8(soak_temp);
+    data_frame += (char) U16_HI8(reflow_time);    data_frame += (char) U16_LO8(reflow_time);
+    data_frame += (char) U16_HI8(reflow_temp);    data_frame += (char) U16_LO8(reflow_temp);
+    ui->statusBar->showMessage(tr("Starting Reflow"));
+    QByteArray character = data_frame.toLocal8Bit();
+    const char *c_str2 = character.data();
+    MainWindow::hdlc_tx_frame(c_str2,character.size());
+}
+
+// Change relay state by sending a command "command, bitmask"
+void MainWindow::toggle_relay(bool checked, quint8 relay) {
+    QString data_frame;
+    if(checked) {
+        data_frame += (char)COMMAND_RELAY_ON;
+        ui->statusBar->showMessage(tr("Relay ON"));
+    } else {
+        data_frame += (char)COMMAND_RELAY_OFF;
+        ui->statusBar->showMessage(tr("Relay OFF"));
+    }
+    data_frame += (char)relay;
+    QByteArray character = data_frame.toLocal8Bit();
+    const char *c_str2 = character.data();
+    MainWindow::hdlc_tx_frame(c_str2,character.size());
+}
+
+// Manual relay control. Checkboxes set the state of relay by bitmask
+// RELAY 1
+void MainWindow::on_checkBox_relay1_toggled(bool checked)
+{
+    MainWindow::toggle_relay(checked, 0x01);
+}
+// RELAY 2
+void MainWindow::on_checkBox_relay2_toggled(bool checked)
+{
+    MainWindow::toggle_relay(checked, 0x02);
+}
+// RELAY 3
+void MainWindow::on_checkBox_relay3_toggled(bool checked)
+{
+    MainWindow::toggle_relay(checked, 0x04);
+}
+// RELAY 4
+void MainWindow::on_checkBox_relay4_toggled(bool checked)
+{
+    MainWindow::toggle_relay(checked, 0x08);
+}
+void MainWindow::stopAll(void) {
+    ui->progressBar->setMaximum(100);
+    ui->progressBar->setValue(100);
+    ui->checkBox_relay1->setChecked(false);
+    ui->checkBox_relay2->setChecked(false);
+    ui->checkBox_relay3->setChecked(false);
+    ui->checkBox_relay4->setChecked(false);
+    // Allow manual/auto use now
+    ui->groupBox_Auto->setDisabled(false);
+    ui->groupBox_manual->setDisabled(false);
+}
+void MainWindow::showRelayState(const quint8 *buffer, quint16 bytes_received) {
+    if(bytes_received > 1) {
+        int command = buffer[0];
+        int bitmask = buffer[1];
+        bool status;
+        if(command == (int)COMMAND_RELAY_ON) {
+            status = true;
+        } else {
+            status = false;
+        }
+        if ((bitmask & 0x01) == 0x01)	{ ui->checkBox_relay1->setChecked(status); }
+        if ((bitmask & 0x02) == 0x02)	{ ui->checkBox_relay2->setChecked(status); }
+        if ((bitmask & 0x04) == 0x04)	{ ui->checkBox_relay3->setChecked(status); }
+        if ((bitmask & 0x08) == 0x08)	{ ui->checkBox_relay4->setChecked(status); }
     }
 }

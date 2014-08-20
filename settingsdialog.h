@@ -34,6 +34,8 @@ public:
         QSerialPort::FlowControl flowControl;
         QString stringFlowControl;
         bool localEchoEnabled;
+        bool DTR_Signal;
+        bool RTS_Signal;
     };
 
     explicit SettingsDialog(QWidget *parent = 0);

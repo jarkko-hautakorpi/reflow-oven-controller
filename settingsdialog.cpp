@@ -154,4 +154,8 @@ void SettingsDialog::updateSettings()
     currentSettings.stringFlowControl = ui->flowControlBox->currentText();
 
     currentSettings.localEchoEnabled = ui->localEchoCheckBox->isChecked();
+
+    currentSettings.DTR_Signal = ui->DTR_SignalcheckBox->isChecked();
+
+    currentSettings.RTS_Signal = ui->RTS_SignalcheckBox->isChecked();
 }

@@ -25,6 +25,7 @@
 #define U32_MH8(data) ((quint8)(((data)>>16)&0xff))
 #define U32_ML8(data) ((quint8)(((data)>>8)&0xff))
 #define U32_LO8(data) ((quint8)((data)&0xff))
+#define U16_FROM8_HI_LO(msb, lsb)  ((uint16_t)((msb)<<8) | (lsb))
 #define SIZEOF_ARRAY( a ) (sizeof( a ) / sizeof( a[ 0 ] ))
 
 QT_BEGIN_NAMESPACE
@@ -63,6 +64,12 @@ private slots:
     void reset_manual_mode();
     void updateTemperatureReading();
     void receivedTemperatureReading(const quint8 *buffer, quint16 bytes_received);
+    void start_default_reflow();
+    void toggle_relay(bool checked, quint8 relay);
+    void on_checkBox_relay1_toggled(bool checked);
+    void on_checkBox_relay2_toggled(bool checked);
+    void on_checkBox_relay3_toggled(bool checked);
+    void on_checkBox_relay4_toggled(bool checked);
 
 private:
     QTimer *timer;
@@ -76,6 +83,8 @@ private:
     void local_echo(char character);
     void sendCommand(int command);
     bool hdlc_crc_check(int frame_index);
+    void stopAll(void);
+    void showRelayState(const quint8 *buffer, quint16 bytes_received);
 
 private:
     Ui::MainWindow *ui;

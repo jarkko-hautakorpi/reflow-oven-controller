@@ -140,7 +140,7 @@
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_8">
       <item>
-       <widget class="QGroupBox" name="groupBox">
+       <widget class="QGroupBox" name="groupBox_manual">
         <property name="enabled">
          <bool>true</bool>
         </property>
@@ -174,6 +174,9 @@
                    <weight>75</weight>
                    <bold>true</bold>
                   </font>
+                 </property>
+                 <property name="autoFillBackground">
+                  <bool>false</bool>
                  </property>
                  <property name="text">
                   <string>RELAY #1</string>
@@ -358,7 +361,7 @@
        </spacer>
       </item>
       <item>
-       <widget class="QGroupBox" name="groupBox_2">
+       <widget class="QGroupBox" name="groupBox_Auto">
         <property name="minimumSize">
          <size>
           <width>300</width>
@@ -372,7 +375,7 @@
          <item>
           <layout class="QVBoxLayout" name="verticalLayout_9">
            <item>
-            <widget class="QPushButton" name="pushButton">
+            <widget class="QPushButton" name="pushButton_StartReflow">
              <property name="font">
               <font>
                <pointsize>14</pointsize>
@@ -433,7 +436,11 @@
               </spacer>
              </item>
              <item>
-              <widget class="QTimeEdit" name="timeEdit_soak"/>
+              <widget class="QTimeEdit" name="timeEdit_soak">
+               <property name="displayFormat">
+                <string extracomment="minute:second">mm:ss</string>
+               </property>
+              </widget>
              </item>
              <item>
               <widget class="QLineEdit" name="lineEdit_soakTemp">
@@ -483,7 +490,11 @@
               </spacer>
              </item>
              <item>
-              <widget class="QTimeEdit" name="timeEdit_reflow"/>
+              <widget class="QTimeEdit" name="timeEdit_reflow">
+               <property name="displayFormat">
+                <string extracomment="minute:second">mm:ss</string>
+               </property>
+              </widget>
              </item>
              <item>
               <widget class="QLineEdit" name="lineEdit_reflowTemp">
@@ -747,22 +758,6 @@
     <hint type="destinationlabel">
      <x>220</x>
      <y>315</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>checkBox_relay1</sender>
-   <signal>stateChanged(int)</signal>
-   <receiver>checkBox_relay1</receiver>
-   <slot>toggle()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>74</x>
-     <y>244</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>72</x>
-     <y>244</y>
     </hint>
    </hints>
   </connection>

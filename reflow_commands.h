@@ -8,16 +8,9 @@ enum reflow_commands {
     COMMAND_START_DEFAULT_REFLOW,
     COMMAND_GET_TEMPERATURE,
     COMMAND_RELAY_ON,
-    COMMAND_RELAY_OFF
+    COMMAND_RELAY_OFF,
+    COMMAND_SET_MANUAL_TARGETTEMP
     };
-
-// Messages that MCU board sends back (answers, replies etc.)
-enum reflow_responsemessages {
-    RESPONSE_TEMPERATURE,
-    RESPONSE_RELAYSTATES
-    };
-
-
 
 
 
