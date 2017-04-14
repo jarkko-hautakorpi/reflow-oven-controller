@@ -6,6 +6,7 @@
 #include <QtSerialPort/QSerialPort>
 #include <QTimer>
 #include <QTime>
+#include <QThread>
 
 quint8 MainWindow::hdlc_rx_frame[HDLC_MRU] = {0};
 int MainWindow::hdlc_rx_frame_index = 0;
@@ -62,7 +63,6 @@ void MainWindow::openSerialPort()
     serial->setParity(p.parity);
     serial->setStopBits(p.stopBits);
     serial->setFlowControl(p.flowControl);
-    //serial->setDataTerminalReady(false);
     if (serial->open(QIODevice::ReadWrite)) {
             ui->actionConnect->setEnabled(false);
             ui->actionDisconnect->setEnabled(true);
@@ -465,4 +465,18 @@ void MainWindow::showRelayState(const quint8 *buffer, quint16 bytes_received) {
         if ((bitmask & 0x04) == 0x04)	{ ui->checkBox_relay3->setChecked(status); }
         if ((bitmask & 0x08) == 0x08)	{ ui->checkBox_relay4->setChecked(status); }
     }
+}
+
+void MainWindow::on_pushButton_sendAT_Baudrate_clicked()
+{
+    QString atcommand;
+    atcommand += "AT+B";
+    atcommand += ui->lineEdit_ATBAUDRATE->text();
+    QByteArray characters = atcommand.toLocal8Bit();
+    const char *c_str2 = characters.data();
+    //serial->write("AT+B4800");
+    serial->write(c_str2);
+    // Change the serial port baudrate now
+    SettingsDialog::Settings p = settings->settings();
+    p.baudRate = ui->lineEdit_ATBAUDRATE->text().toInt();
 }

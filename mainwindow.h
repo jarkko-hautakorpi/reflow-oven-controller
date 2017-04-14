@@ -71,6 +71,8 @@ private slots:
     void on_checkBox_relay3_toggled(bool checked);
     void on_checkBox_relay4_toggled(bool checked);
 
+    void on_pushButton_sendAT_Baudrate_clicked();
+
 private:
     QTimer *timer;
     void initActionsConnections();

@@ -8,5 +8,6 @@
         <file>images/relay-symbol.png</file>
         <file>images/diagram.png</file>
         <file>images/diagram2.png</file>
+        <file>images/HC-11RADIO.png</file>
     </qresource>
 </RCC>
