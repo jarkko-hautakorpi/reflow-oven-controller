@@ -8,3 +8,4 @@ Application has realtime temperature display. Each of four relays can be manuall
 
 Automatic run mode has preheat and reflow times and temperatures.
 
+![Screenshot](https://github.com/jarkko-hautakorpi/reflow-oven-controller/blob/master/screenshot.jpg)
